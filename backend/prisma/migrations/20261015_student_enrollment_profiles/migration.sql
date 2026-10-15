@@ -1,0 +1,10 @@
+CREATE TYPE "EnrollmentStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
+
+ALTER TABLE "User"
+ADD COLUMN "name" TEXT NOT NULL DEFAULT '',
+ADD COLUMN "phone" TEXT,
+ADD COLUMN "status" "EnrollmentStatus" NOT NULL DEFAULT 'PENDING';
+
+UPDATE "User"
+SET "status" = 'APPROVED'
+WHERE "role" IN ('ADMIN', 'SUPER_ADMIN');

@@ -1,0 +1,10 @@
+
+services:
+  my-database:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: mini-learning-platform
+    ports:
+      - "5432:5432"
