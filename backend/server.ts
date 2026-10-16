@@ -1791,6 +1791,7 @@ app.post(
           .json({ error: "Could not save the notification." });
       }
 
+      let pushSent = false;
       try {
         const response = await getMessaging().send({
           topic: "all",
@@ -1801,19 +1802,22 @@ app.post(
             notification: { channelId: "mini_learning_announcements" },
           },
         });
-
-        return res.json({
-          message: "Notification sent successfully.",
-          notification,
-          response,
-        });
+        pushSent = true;
+        console.log("Push notification sent:", response);
       } catch (error) {
-        await prisma.$executeRaw`DELETE FROM "NotificationMessage" WHERE "id" = ${notification.id}`;
-        throw error;
+        console.error("Firebase push delivery failed:", error);
       }
+
+      return res.json({
+        message: pushSent
+          ? "Notification sent successfully."
+          : "Announcement saved to the student inbox, but push delivery failed. Check Firebase messaging setup.",
+        notification,
+        pushSent,
+      });
     } catch (error) {
-      console.error("Firebase Error:", error);
-      return res.status(500).json({ error: "Failed to send notification." });
+      console.error("Failed to create notification:", error);
+      return res.status(500).json({ error: "Failed to create the announcement." });
     }
   },
 );

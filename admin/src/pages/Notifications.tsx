@@ -16,6 +16,7 @@ export default function Notifications() {
   const [notice, setNotice] = useState<{
     text: string;
     isError: boolean;
+    isWarning?: boolean;
   } | null>(null);
 
   const sendNotification = async (event: FormEvent<HTMLFormElement>) => {
@@ -27,6 +28,7 @@ export default function Notifications() {
       setNotice({
         text: response.data.message || "Notification sent to the app.",
         isError: false,
+        isWarning: response.data.pushSent === false,
       });
       setTitle("");
       setMessage("");
@@ -59,9 +61,9 @@ export default function Notifications() {
       {notice && (
         <div
           role="status"
-          className={`ui-alert ${notice.isError ? "ui-alert-error" : "ui-alert-success"}`}
+          className={`ui-alert ${notice.isError ? "ui-alert-error" : notice.isWarning ? "ui-alert-info" : "ui-alert-success"}`}
         >
-          {notice.isError ? (
+          {notice.isError || notice.isWarning ? (
             <AlertCircle size={18} />
           ) : (
             <CheckCircle2 size={18} />
