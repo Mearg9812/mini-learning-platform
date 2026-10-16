@@ -76,7 +76,7 @@ const configuredOrigins = (process.env.CORS_ORIGINS || "")
   .filter(Boolean);
 const allowedOrigins = new Set([
   "http://localhost:5173",
-  "https://mini-learning-platform-one.vercel.app",
+  "https://mini-learning-platform-n573xcepm-timeless1.vercel.app",
   ...configuredOrigins,
 ]);
 
@@ -260,12 +260,10 @@ app.post("/register", async (req: Request, res: Response): Promise<any> => {
         !uploadedReceipt.ContentLength ||
         uploadedReceipt.ContentLength > 5 * 1024 * 1024
       ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Receipt screenshot upload is missing or invalid. Please attach it again.",
-          });
+        return res.status(400).json({
+          error:
+            "Receipt screenshot upload is missing or invalid. Please attach it again.",
+        });
       }
     }
 
@@ -351,12 +349,10 @@ app.post("/login", async (req: Request, res: Response): Promise<any> => {
           })
         : null;
     if (phoneMatches && phoneMatches.length > 1) {
-      return res
-        .status(409)
-        .json({
-          error:
-            "More than one student account uses this phone number. Contact an administrator to correct the account numbers.",
-        });
+      return res.status(409).json({
+        error:
+          "More than one student account uses this phone number. Contact an administrator to correct the account numbers.",
+      });
     }
     const user = phoneMatches
       ? phoneMatches[0] || null
@@ -535,11 +531,9 @@ app.patch(
           select: { id: true },
         });
         if (duplicatePhone)
-          return res
-            .status(400)
-            .json({
-              error: "That phone number is already used by another student.",
-            });
+          return res.status(400).json({
+            error: "That phone number is already used by another student.",
+          });
       }
 
       const updated = await prisma.user.update({
@@ -589,12 +583,10 @@ app.patch(
         typeof newPassword !== "string" ||
         newPassword.length < 8
       ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Enter your current password and a new password with at least 8 characters.",
-          });
+        return res.status(400).json({
+          error:
+            "Enter your current password and a new password with at least 8 characters.",
+        });
       }
       const account = await prisma.user.findUnique({
         where: { id: (req as any).user.userId },
@@ -722,11 +714,9 @@ app.post(
       } = req.body;
 
       if (!courseValues.includes(course))
-        return res
-          .status(400)
-          .json({
-            error: "Assign the video to a valid course or Free for all.",
-          });
+        return res.status(400).json({
+          error: "Assign the video to a valid course or Free for all.",
+        });
 
       const newVideo = await prisma.video.create({
         data: {
@@ -865,11 +855,9 @@ app.post(
           !uploadedReceipt.ContentLength ||
           uploadedReceipt.ContentLength > 5 * 1024 * 1024
         ) {
-          return res
-            .status(400)
-            .json({
-              error: "Receipt screenshot upload is missing or invalid.",
-            });
+          return res.status(400).json({
+            error: "Receipt screenshot upload is missing or invalid.",
+          });
         }
       }
       const request = await prisma.paymentRequest.create({
@@ -1530,11 +1518,9 @@ app.patch(
             select: { id: true },
           });
           if (duplicatePhone)
-            return res
-              .status(400)
-              .json({
-                error: "That phone number is already used by another student.",
-              });
+            return res.status(400).json({
+              error: "That phone number is already used by another student.",
+            });
         }
         data.phone = typeof phone === "string" ? normalizedPhone || null : null;
       } else if (existingUser.role === "USER") {
@@ -1543,28 +1529,22 @@ app.patch(
           select: { phone: true },
         });
         if (!current?.phone || !validPhone(normalizePhone(current.phone))) {
-          return res
-            .status(400)
-            .json({
-              error: "Add a valid phone number to this student account.",
-            });
+          return res.status(400).json({
+            error: "Add a valid phone number to this student account.",
+          });
         }
         data.email = null;
       }
       if (password !== undefined && password !== "") {
         if (existingUser.role !== "USER")
-          return res
-            .status(403)
-            .json({
-              error:
-                "Use your own security settings to change an administrator password.",
-            });
+          return res.status(403).json({
+            error:
+              "Use your own security settings to change an administrator password.",
+          });
         if (typeof password !== "string" || password.length < 8)
-          return res
-            .status(400)
-            .json({
-              error: "Student passwords must be at least 8 characters.",
-            });
+          return res.status(400).json({
+            error: "Student passwords must be at least 8 characters.",
+          });
         data.password = await bcrypt.hash(password, 10);
       }
       if (Object.keys(data).length === 0) {
@@ -1689,12 +1669,10 @@ app.post(
 
       return res.status(201).json(newUser);
     } catch (error) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Phone number/email already registered or account details are invalid.",
-        });
+      return res.status(400).json({
+        error:
+          "Phone number/email already registered or account details are invalid.",
+      });
     }
   },
 );
@@ -1817,7 +1795,9 @@ app.post(
       });
     } catch (error) {
       console.error("Failed to create notification:", error);
-      return res.status(500).json({ error: "Failed to create the announcement." });
+      return res
+        .status(500)
+        .json({ error: "Failed to create the announcement." });
     }
   },
 );
