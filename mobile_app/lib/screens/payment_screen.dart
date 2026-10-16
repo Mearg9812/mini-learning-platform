@@ -73,9 +73,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _submit() async {
+    final authProvider = context.read<AuthProvider>();
     final amount = double.tryParse(_amount.text.trim());
     final currency = _currency.text.trim().toUpperCase();
-    if (amount == null || amount <= 0 || !RegExp(r'^[A-Z]{3}$').hasMatch(currency)) {
+    if (amount == null ||
+        amount <= 0 ||
+        !RegExp(r'^[A-Z]{3}$').hasMatch(currency)) {
       setState(
         () => _error = 'Enter the amount paid and a 3-letter currency code.',
       );
@@ -90,21 +93,37 @@ class _PaymentScreenState extends State<PaymentScreen> {
       if (_image != null) {
         final image = _image!;
         final extension = image.name.toLowerCase().split('.').last;
-        final mime = image.mimeType ?? (extension == 'png' ? 'image/png' : extension == 'webp' ? 'image/webp' : 'image/jpeg');
-        final ticket = await context.read<AuthProvider>().client.post('/payment-requests/receipt-upload-url', data: {
-          'fileName': image.name, 'fileType': mime, 'fileSize': await image.length(),
-        });
-        await Dio().put<dynamic>(ticket.data['uploadUrl'] as String, data: await image.readAsBytes(), options: Options(headers: {'Content-Type': mime}));
+        final mime =
+            image.mimeType ??
+            (extension == 'png'
+                ? 'image/png'
+                : extension == 'webp'
+                ? 'image/webp'
+                : 'image/jpeg');
+        final ticket = await authProvider.client.post(
+          '/payment-requests/receipt-upload-url',
+          data: {
+            'fileName': image.name,
+            'fileType': mime,
+            'fileSize': await image.length(),
+          },
+        );
+        await Dio().put<dynamic>(
+          ticket.data['uploadUrl'] as String,
+          data: await image.readAsBytes(),
+          options: Options(headers: {'Content-Type': mime}),
+        );
         receiptObjectKey = ticket.data['receiptObjectKey'] as String;
       }
-      await context.read<AuthProvider>().client.post(
+      await authProvider.client.post(
         '/payment-requests',
         data: {
           'option': _option,
           'amount': amount,
           'currency': currency,
-          if (_receiptText.text.trim().isNotEmpty) 'receiptText': _receiptText.text.trim(),
-          if (receiptObjectKey != null) 'receiptObjectKey': receiptObjectKey,
+          if (_receiptText.text.trim().isNotEmpty)
+            'receiptText': _receiptText.text.trim(),
+          'receiptObjectKey': ?receiptObjectKey,
         },
       );
       _amount.clear();
@@ -119,7 +138,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     } catch (error) {
       if (mounted) {
         setState(
-          () => _error = context.read<AuthProvider>().messageFrom(
+          () => _error = authProvider.messageFrom(
             error,
             'Could not submit your receipt. Please try again.',
           ),
@@ -215,7 +234,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   OutlinedButton.icon(
                     onPressed: _sending ? null : _pickImage,
                     icon: const Icon(Icons.image_outlined),
-                    label: Text(_image?.name ?? 'Attach receipt screenshot (optional)'),
+                    label: Text(
+                      _image?.name ?? 'Attach receipt screenshot (optional)',
+                    ),
                   ),
                   if (_error != null)
                     Padding(

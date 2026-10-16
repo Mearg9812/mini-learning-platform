@@ -1,0 +1,38 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      # Backend
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: npm install
+
+      - name: Build Backend (TypeScript)
+        working-directory: ./backend
+        run: npx tsc
+
+      # Frontend
+      - name: Install Frontend Dependencies
+        working-directory: ./admin-panel
+        run: npm install
+
+      - name: Build React Dashboard
+        working-directory: ./admin-panel
+        run: npm run build
+
+      - name: Run Tests
+        run: echo "Builds passed! Automated tests would execute here."

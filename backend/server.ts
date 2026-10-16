@@ -7,6 +7,9 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { randomUUID } from "crypto";
 
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+
 import {
   S3Client,
   PutObjectCommand,
@@ -18,12 +21,20 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import * as admin from "firebase-admin";
 import { cert } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
+import { existsSync } from "fs";
 import path from "path";
 
 dotenv.config();
 
 // 2. SETTING UP THE APP
 const app = express();
+app.use(helmet());
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per window
+  message: { error: "Too many requests from this IP, please try again later." },
+});
+app.use(limiter);
 const prisma = new PrismaClient();
 
 // Turns on the Cloudflare/AWS Chef
@@ -38,14 +49,44 @@ const s3 = new S3Client({
 });
 
 // Turns on Firebase Cloud Messaging
-const serviceAccount = require(
-  path.join(__dirname, "firebase-service-account.json"),
-);
+const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
+  ? path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
+  : [
+      path.resolve(process.cwd(), "firebase-service-account.json"),
+      path.resolve(__dirname, "../firebase-service-account.json"),
+      path.resolve(__dirname, "firebase-service-account.json"),
+    ].find(existsSync);
+
+if (!serviceAccountPath || !existsSync(serviceAccountPath)) {
+  throw new Error(
+    "Firebase service account not found. Set FIREBASE_SERVICE_ACCOUNT_PATH or place firebase-service-account.json in the backend directory.",
+  );
+}
+
+const serviceAccount = require(serviceAccountPath);
 admin.initializeApp({
   credential: cert(serviceAccount),
 });
 
-app.use(cors());
+// Allow requests ONLY from your local React app and your live Vercel app
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://YOUR_VERCEL_PROJECT_URL.vercel.app",
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  }),
+);
+
 app.use(express.json());
 
 const getPublicProfileImageUrl = (
@@ -170,7 +211,8 @@ app.post("/register", async (req: Request, res: Response): Promise<any> => {
     const normalizedPhone = normalizePhone(phone);
     const hasPayment = option !== undefined && option !== null && option !== "";
     const parsedAmount = Number(amount);
-    const normalizedCurrency = typeof currency === "string" ? currency.trim() : "";
+    const normalizedCurrency =
+      typeof currency === "string" ? currency.trim() : "";
 
     if (
       normalizedName.length < 2 ||
@@ -178,9 +220,17 @@ app.post("/register", async (req: Request, res: Response): Promise<any> => {
       !validPhone(normalizedPhone) ||
       typeof password !== "string" ||
       password.length < 8 ||
-      (hasPayment && (!purchaseValues.includes(option) || !Number.isFinite(parsedAmount) || parsedAmount <= 0 || parsedAmount > 1000000000 || !/^[A-Za-z]{3}$/.test(normalizedCurrency))) ||
-      (receiptText != null && (typeof receiptText !== "string" || receiptText.length > 10000)) ||
-      (receiptObjectKey != null && (typeof receiptObjectKey !== "string" || !receiptObjectKey.startsWith("payment-receipts/registration/"))) ||
+      (hasPayment &&
+        (!purchaseValues.includes(option) ||
+          !Number.isFinite(parsedAmount) ||
+          parsedAmount <= 0 ||
+          parsedAmount > 1000000000 ||
+          !/^[A-Za-z]{3}$/.test(normalizedCurrency))) ||
+      (receiptText != null &&
+        (typeof receiptText !== "string" || receiptText.length > 10000)) ||
+      (receiptObjectKey != null &&
+        (typeof receiptObjectKey !== "string" ||
+          !receiptObjectKey.startsWith("payment-receipts/registration/"))) ||
       (!hasPayment && (receiptText || receiptObjectKey))
     ) {
       return res.status(400).json({
@@ -190,17 +240,37 @@ app.post("/register", async (req: Request, res: Response): Promise<any> => {
     }
 
     if (receiptObjectKey) {
-      const uploadedReceipt = await s3.send(new HeadObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: receiptObjectKey,
-      }));
-      if (!uploadedReceipt.ContentType || !["image/jpeg", "image/png", "image/webp"].includes(uploadedReceipt.ContentType) || !uploadedReceipt.ContentLength || uploadedReceipt.ContentLength > 5 * 1024 * 1024) {
-        return res.status(400).json({ error: "Receipt screenshot upload is missing or invalid. Please attach it again." });
+      const uploadedReceipt = await s3.send(
+        new HeadObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: receiptObjectKey,
+        }),
+      );
+      if (
+        !uploadedReceipt.ContentType ||
+        !["image/jpeg", "image/png", "image/webp"].includes(
+          uploadedReceipt.ContentType,
+        ) ||
+        !uploadedReceipt.ContentLength ||
+        uploadedReceipt.ContentLength > 5 * 1024 * 1024
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Receipt screenshot upload is missing or invalid. Please attach it again.",
+          });
       }
     }
 
-    const phoneInUse = await prisma.user.findFirst({ where: { role: "USER", phone: normalizedPhone }, select: { id: true } });
-    if (phoneInUse) return res.status(400).json({ error: "That phone number is already registered." });
+    const phoneInUse = await prisma.user.findFirst({
+      where: { role: "USER", phone: normalizedPhone },
+      select: { id: true },
+    });
+    if (phoneInUse)
+      return res
+        .status(400)
+        .json({ error: "That phone number is already registered." });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = await prisma.$transaction(async (tx) => {
@@ -220,21 +290,27 @@ app.post("/register", async (req: Request, res: Response): Promise<any> => {
           createdAt: true,
         },
       });
-      if (hasPayment) await tx.paymentRequest.create({
-        data: {
-          userId: createdUser.id,
-          option,
-          amount: parsedAmount,
-          currency: normalizedCurrency.toUpperCase(),
-          receiptText: typeof receiptText === "string" ? receiptText.trim() || null : null,
-          receiptObjectKey: receiptObjectKey || null,
-        },
-      });
+      if (hasPayment)
+        await tx.paymentRequest.create({
+          data: {
+            userId: createdUser.id,
+            option,
+            amount: parsedAmount,
+            currency: normalizedCurrency.toUpperCase(),
+            receiptText:
+              typeof receiptText === "string"
+                ? receiptText.trim() || null
+                : null,
+            receiptObjectKey: receiptObjectKey || null,
+          },
+        });
       return createdUser;
     });
 
     return res.status(201).json({
-      message: hasPayment ? "Account and payment review request submitted. Sign in to watch your request." : "Account created. Sign in to watch free videos and submit payment later.",
+      message: hasPayment
+        ? "Account and payment review request submitted. Sign in to watch your request."
+        : "Account created. Sign in to watch free videos and submit payment later.",
       user: newUser,
     });
   } catch (error) {
@@ -261,13 +337,24 @@ app.post("/login", async (req: Request, res: Response): Promise<any> => {
       typeof email === "string" ? email.trim().toLowerCase() : "";
 
     const normalizedPhone = normalizePhone(phone);
-    const phoneMatches = phone != null
-      ? await prisma.user.findMany({ where: { phone: normalizedPhone, role: "USER" }, take: 2 })
-      : null;
+    const phoneMatches =
+      phone != null
+        ? await prisma.user.findMany({
+            where: { phone: normalizedPhone, role: "USER" },
+            take: 2,
+          })
+        : null;
     if (phoneMatches && phoneMatches.length > 1) {
-      return res.status(409).json({ error: "More than one student account uses this phone number. Contact an administrator to correct the account numbers." });
+      return res
+        .status(409)
+        .json({
+          error:
+            "More than one student account uses this phone number. Contact an administrator to correct the account numbers.",
+        });
     }
-    const user = phoneMatches ? phoneMatches[0] || null : await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    const user = phoneMatches
+      ? phoneMatches[0] || null
+      : await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
     if (
       !user ||
@@ -275,7 +362,9 @@ app.post("/login", async (req: Request, res: Response): Promise<any> => {
       typeof password !== "string" ||
       !(await bcrypt.compare(password, user.password))
     ) {
-      return res.status(401).json({ error: "Phone/email or password is incorrect." });
+      return res
+        .status(401)
+        .json({ error: "Phone/email or password is incorrect." });
     }
 
     console.log("User logged in:", user.role);
@@ -396,7 +485,11 @@ app.get(
         ? await coursesForStudent(user.userId)
         : [...courseValues];
     const { email, ...profile } = user;
-    return res.json({ ...profile, ...(user.role === "USER" ? {} : { email }), accessCourses });
+    return res.json({
+      ...profile,
+      ...(user.role === "USER" ? {} : { email }),
+      accessCourses,
+    });
   },
 );
 
@@ -412,19 +505,35 @@ app.patch(
         typeof email === "string" ? email.trim().toLowerCase() : "";
       const normalizedPhone = normalizePhone(phone);
       const isStudent = actor.role === "USER";
-      if (normalizedName.length < 2 || normalizedName.length > 100 ||
-        (isStudent ? !validPhone(normalizedPhone) : !/^\S+@\S+\.\S+$/.test(normalizedEmail)) ||
-        (phone != null && (typeof phone !== "string" || phone.length > 32))) {
+      if (
+        normalizedName.length < 2 ||
+        normalizedName.length > 100 ||
+        (isStudent
+          ? !validPhone(normalizedPhone)
+          : !/^\S+@\S+\.\S+$/.test(normalizedEmail)) ||
+        (phone != null && (typeof phone !== "string" || phone.length > 32))
+      ) {
         return res.status(400).json({
-          error: isStudent ? "Enter a valid name and phone number." : "Enter a valid name and email address.",
+          error: isStudent
+            ? "Enter a valid name and phone number."
+            : "Enter a valid name and email address.",
         });
       }
       if (isStudent) {
         const duplicatePhone = await prisma.user.findFirst({
-          where: { role: "USER", phone: normalizedPhone, id: { not: actor.userId } },
+          where: {
+            role: "USER",
+            phone: normalizedPhone,
+            id: { not: actor.userId },
+          },
           select: { id: true },
         });
-        if (duplicatePhone) return res.status(400).json({ error: "That phone number is already used by another student." });
+        if (duplicatePhone)
+          return res
+            .status(400)
+            .json({
+              error: "That phone number is already used by another student.",
+            });
       }
 
       const updated = await prisma.user.update({
@@ -469,14 +578,33 @@ app.patch(
   async (req: Request, res: Response): Promise<any> => {
     try {
       const { currentPassword, newPassword } = req.body;
-      if (typeof currentPassword !== "string" || typeof newPassword !== "string" || newPassword.length < 8) {
-        return res.status(400).json({ error: "Enter your current password and a new password with at least 8 characters." });
+      if (
+        typeof currentPassword !== "string" ||
+        typeof newPassword !== "string" ||
+        newPassword.length < 8
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Enter your current password and a new password with at least 8 characters.",
+          });
       }
-      const account = await prisma.user.findUnique({ where: { id: (req as any).user.userId } });
-      if (!account || !(await bcrypt.compare(currentPassword, account.password))) {
-        return res.status(400).json({ error: "Current password is incorrect." });
+      const account = await prisma.user.findUnique({
+        where: { id: (req as any).user.userId },
+      });
+      if (
+        !account ||
+        !(await bcrypt.compare(currentPassword, account.password))
+      ) {
+        return res
+          .status(400)
+          .json({ error: "Current password is incorrect." });
       }
-      await prisma.user.update({ where: { id: account.id }, data: { password: await bcrypt.hash(newPassword, 10) } });
+      await prisma.user.update({
+        where: { id: account.id },
+        data: { password: await bcrypt.hash(newPassword, 10) },
+      });
       return res.json({ message: "Password updated successfully." });
     } catch {
       return res.status(500).json({ error: "Could not update password." });
@@ -590,7 +718,9 @@ app.post(
       if (!courseValues.includes(course))
         return res
           .status(400)
-          .json({ error: "Assign the video to a valid course or Free for all." });
+          .json({
+            error: "Assign the video to a valid course or Free for all.",
+          });
 
       const newVideo = await prisma.video.create({
         data: {
@@ -704,18 +834,36 @@ app.post(
         parsedAmount > 1000000000 ||
         typeof currency !== "string" ||
         !/^[A-Za-z]{3}$/.test(currency) ||
-        (receiptText != null && (typeof receiptText !== "string" || receiptText.length > 10000)) ||
-        (receiptObjectKey != null && (typeof receiptObjectKey !== "string" || !receiptObjectKey.startsWith(`payment-receipts/${user.userId}/`)))
+        (receiptText != null &&
+          (typeof receiptText !== "string" || receiptText.length > 10000)) ||
+        (receiptObjectKey != null &&
+          (typeof receiptObjectKey !== "string" ||
+            !receiptObjectKey.startsWith(`payment-receipts/${user.userId}/`)))
       ) {
         return res.status(400).json({
-          error:
-            "Enter a valid course, amount, and 3-letter currency code.",
+          error: "Enter a valid course, amount, and 3-letter currency code.",
         });
       }
       if (receiptObjectKey) {
-        const uploadedReceipt = await s3.send(new HeadObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: receiptObjectKey }));
-        if (!uploadedReceipt.ContentType || !["image/jpeg", "image/png", "image/webp"].includes(uploadedReceipt.ContentType) || !uploadedReceipt.ContentLength || uploadedReceipt.ContentLength > 5 * 1024 * 1024) {
-          return res.status(400).json({ error: "Receipt screenshot upload is missing or invalid." });
+        const uploadedReceipt = await s3.send(
+          new HeadObjectCommand({
+            Bucket: process.env.R2_BUCKET_NAME,
+            Key: receiptObjectKey,
+          }),
+        );
+        if (
+          !uploadedReceipt.ContentType ||
+          !["image/jpeg", "image/png", "image/webp"].includes(
+            uploadedReceipt.ContentType,
+          ) ||
+          !uploadedReceipt.ContentLength ||
+          uploadedReceipt.ContentLength > 5 * 1024 * 1024
+        ) {
+          return res
+            .status(400)
+            .json({
+              error: "Receipt screenshot upload is missing or invalid.",
+            });
         }
       }
       const request = await prisma.paymentRequest.create({
@@ -724,7 +872,8 @@ app.post(
           option,
           amount: parsedAmount,
           currency: currency.toUpperCase(),
-          receiptText: typeof receiptText === "string" ? receiptText.trim() || null : null,
+          receiptText:
+            typeof receiptText === "string" ? receiptText.trim() || null : null,
           receiptObjectKey: receiptObjectKey || null,
         },
       });
@@ -781,14 +930,16 @@ app.get(
         requests.map(async ({ receiptObjectKey, ...request }) => ({
           ...request,
           amount: request.amount.toString(),
-          receiptImageUrl: receiptObjectKey ? await getSignedUrl(
-            s3,
-            new GetObjectCommand({
-              Bucket: process.env.R2_BUCKET_NAME,
-              Key: receiptObjectKey,
-            }),
-            { expiresIn: 900 },
-          ) : null,
+          receiptImageUrl: receiptObjectKey
+            ? await getSignedUrl(
+                s3,
+                new GetObjectCommand({
+                  Bucket: process.env.R2_BUCKET_NAME,
+                  Key: receiptObjectKey,
+                }),
+                { expiresIn: 900 },
+              )
+            : null,
         })),
       );
       return res.json(result);
@@ -833,11 +984,19 @@ app.patch(
           reviewedAt: new Date(),
         },
       });
-      const approvedPayments = await prisma.paymentRequest.count({ where: { userId: existing.userId, status: "APPROVED" } });
+      const approvedPayments = await prisma.paymentRequest.count({
+        where: { userId: existing.userId, status: "APPROVED" },
+      });
       if (approvedPayments > 0) {
-        await prisma.user.update({ where: { id: existing.userId }, data: { status: "APPROVED" } });
+        await prisma.user.update({
+          where: { id: existing.userId },
+          data: { status: "APPROVED" },
+        });
       } else if (status === "REJECTED") {
-        await prisma.user.update({ where: { id: existing.userId }, data: { status: "REJECTED" } });
+        await prisma.user.update({
+          where: { id: existing.userId },
+          data: { status: "REJECTED" },
+        });
       }
       return res.json({
         id: payment.id,
@@ -1050,7 +1209,12 @@ app.patch(
       if (status === "REJECTED") {
         await prisma.paymentRequest.updateMany({
           where: { userId, status: "APPROVED" },
-          data: { status: "REJECTED", approvedOption: null, reviewedById: (req as any).user.userId, reviewedAt: new Date() },
+          data: {
+            status: "REJECTED",
+            approvedOption: null,
+            reviewedById: (req as any).user.userId,
+            reviewedAt: new Date(),
+          },
         });
       }
       return res.json(updated);
@@ -1109,7 +1273,16 @@ app.get(
           ? {
               OR: [
                 { name: { contains: search, mode: "insensitive" } },
-                ...(accountType === "STUDENT" ? [] : [{ email: { contains: search, mode: "insensitive" as const } }]),
+                ...(accountType === "STUDENT"
+                  ? []
+                  : [
+                      {
+                        email: {
+                          contains: search,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    ]),
                 { phone: { contains: search, mode: "insensitive" } },
               ],
             }
@@ -1315,7 +1488,9 @@ app.patch(
       }
       if (email !== undefined) {
         if (existingUser.role === "USER") {
-          return res.status(400).json({ error: "Student accounts use a phone number, not email." });
+          return res
+            .status(400)
+            .json({ error: "Student accounts use a phone number, not email." });
         }
         if (typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email.trim())) {
           return res
@@ -1335,26 +1510,55 @@ app.patch(
         }
         const normalizedPhone = normalizePhone(phone);
         if (existingUser.role === "USER" && !validPhone(normalizedPhone)) {
-          return res.status(400).json({ error: "Enter a valid student phone number." });
+          return res
+            .status(400)
+            .json({ error: "Enter a valid student phone number." });
         }
         if (existingUser.role === "USER") {
           const duplicatePhone = await prisma.user.findFirst({
-            where: { role: "USER", phone: normalizedPhone, id: { not: existingUser.id } },
+            where: {
+              role: "USER",
+              phone: normalizedPhone,
+              id: { not: existingUser.id },
+            },
             select: { id: true },
           });
-          if (duplicatePhone) return res.status(400).json({ error: "That phone number is already used by another student." });
+          if (duplicatePhone)
+            return res
+              .status(400)
+              .json({
+                error: "That phone number is already used by another student.",
+              });
         }
         data.phone = typeof phone === "string" ? normalizedPhone || null : null;
       } else if (existingUser.role === "USER") {
-        const current = await prisma.user.findUnique({ where: { id: existingUser.id }, select: { phone: true } });
+        const current = await prisma.user.findUnique({
+          where: { id: existingUser.id },
+          select: { phone: true },
+        });
         if (!current?.phone || !validPhone(normalizePhone(current.phone))) {
-          return res.status(400).json({ error: "Add a valid phone number to this student account." });
+          return res
+            .status(400)
+            .json({
+              error: "Add a valid phone number to this student account.",
+            });
         }
         data.email = null;
       }
       if (password !== undefined && password !== "") {
-        if (existingUser.role !== "USER") return res.status(403).json({ error: "Use your own security settings to change an administrator password." });
-        if (typeof password !== "string" || password.length < 8) return res.status(400).json({ error: "Student passwords must be at least 8 characters." });
+        if (existingUser.role !== "USER")
+          return res
+            .status(403)
+            .json({
+              error:
+                "Use your own security settings to change an administrator password.",
+            });
+        if (typeof password !== "string" || password.length < 8)
+          return res
+            .status(400)
+            .json({
+              error: "Student passwords must be at least 8 characters.",
+            });
         data.password = await bcrypt.hash(password, 10);
       }
       if (Object.keys(data).length === 0) {
@@ -1383,7 +1587,8 @@ app.patch(
       });
     } catch (error) {
       return res.status(400).json({
-        error: "Could not update account. Check the phone number and try again.",
+        error:
+          "Could not update account. Check the phone number and try again.",
       });
     }
   },
@@ -1433,12 +1638,15 @@ app.post(
       const normalizedName = typeof name === "string" ? name.trim() : "";
       const selectedRole =
         role || (actor.role === "SUPER_ADMIN" ? "ADMIN" : "USER");
-      const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+      const normalizedEmail =
+        typeof email === "string" ? email.trim().toLowerCase() : "";
       const normalizedPhone = normalizePhone(phone);
       if (
         normalizedName.length < 2 ||
         normalizedName.length > 100 ||
-        (selectedRole === "USER" ? !validPhone(normalizedPhone) : !/^\S+@\S+\.\S+$/.test(normalizedEmail)) ||
+        (selectedRole === "USER"
+          ? !validPhone(normalizedPhone)
+          : !/^\S+@\S+\.\S+$/.test(normalizedEmail)) ||
         typeof password !== "string" ||
         password.length < 8 ||
         (phone != null && (typeof phone !== "string" || phone.length > 32)) ||
@@ -1456,7 +1664,8 @@ app.post(
         data: {
           name: normalizedName,
           email: selectedRole === "USER" ? null : normalizedEmail,
-          phone: selectedRole === "USER" ? normalizedPhone : phone?.trim() || null,
+          phone:
+            selectedRole === "USER" ? normalizedPhone : phone?.trim() || null,
           password: hashedPassword,
           role: selectedRole as any,
           status: selectedRole === "USER" ? "PENDING" : "APPROVED",
@@ -1476,7 +1685,10 @@ app.post(
     } catch (error) {
       return res
         .status(400)
-        .json({ error: "Phone number/email already registered or account details are invalid." });
+        .json({
+          error:
+            "Phone number/email already registered or account details are invalid.",
+        });
     }
   },
 );
@@ -1488,7 +1700,13 @@ app.get(
     try {
       const userId = (req as any).user.userId as string;
       const notifications = await prisma.$queryRaw<
-        Array<{ id: string; title: string; body: string; createdAt: Date; isRead: boolean }>
+        Array<{
+          id: string;
+          title: string;
+          body: string;
+          createdAt: Date;
+          isRead: boolean;
+        }>
       >`SELECT n."id", n."title", n."body", n."createdAt",
           EXISTS (
             SELECT 1 FROM "NotificationRead" r
@@ -1550,7 +1768,8 @@ app.post(
         normalizedBody.length > 5000
       ) {
         return res.status(400).json({
-          error: "Enter a title up to 120 characters and a message up to 5,000 characters.",
+          error:
+            "Enter a title up to 120 characters and a message up to 5,000 characters.",
         });
       }
 
@@ -1561,7 +1780,9 @@ app.post(
         RETURNING "id", "title", "body", "createdAt"`;
       const notification = created[0];
       if (!notification) {
-        return res.status(500).json({ error: "Could not save the notification." });
+        return res
+          .status(500)
+          .json({ error: "Could not save the notification." });
       }
 
       try {

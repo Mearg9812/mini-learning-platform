@@ -57,11 +57,11 @@ class AuthProvider extends ChangeNotifier {
         'name': name.trim(),
         'phone': phone.trim(),
         'password': password,
-        if (option != null) 'option': option,
-        if (amount != null) 'amount': amount,
-        if (currency != null) 'currency': currency,
+        'option': ?option,
+        'amount': amount,
+        'currency': ?currency,
         if (receiptText != null) 'receiptText': receiptText.trim(),
-        if (receiptObjectKey != null) 'receiptObjectKey': receiptObjectKey,
+        'receiptObjectKey': ?receiptObjectKey,
       },
     );
   }

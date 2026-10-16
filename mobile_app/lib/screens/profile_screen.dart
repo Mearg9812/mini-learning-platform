@@ -39,7 +39,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (error) {
       if (mounted) {
         _showMessage(
-          context.read<AuthProvider>().messageFrom(error, 'Could not save your profile.'),
+          context.read<AuthProvider>().messageFrom(
+            error,
+            'Could not save your profile.',
+          ),
           isError: true,
         );
       }
@@ -49,6 +52,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickProfileImage() async {
+    final auth = context.read<AuthProvider>();
     final image = await _picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 1400,
@@ -59,7 +63,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final bytes = await image.readAsBytes();
     final contentType = image.mimeType ?? _contentTypeFor(image.name);
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].contains(contentType)) {
+    if (![
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+    ].contains(contentType)) {
       _showMessage('Choose a JPG, PNG, WebP, or GIF image.', isError: true);
       return;
     }
@@ -70,7 +79,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isUploading = true);
     try {
-      final auth = context.read<AuthProvider>();
       final ticket = await auth.client.post(
         '/profile/image/upload-url',
         data: {
@@ -89,7 +97,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (error) {
       if (mounted) {
         _showMessage(
-          context.read<AuthProvider>().messageFrom(error, 'Could not upload your profile picture.'),
+          context.read<AuthProvider>().messageFrom(
+            error,
+            'Could not upload your profile picture.',
+          ),
           isError: true,
         );
       }
@@ -134,7 +145,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final user = context.watch<AuthProvider>().user ?? const <String, dynamic>{};
+    final user =
+        context.watch<AuthProvider>().user ?? const <String, dynamic>{};
     final imageUrl = user['profileImage'] as String?;
     final isDarkMode = context.watch<ThemeProvider>().isDarkMode;
 
@@ -143,9 +155,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('Your profile'),
         actions: [
           IconButton(
-            tooltip: isDarkMode ? 'Switch to light mode' : 'Switch to dark mode',
+            tooltip: isDarkMode
+                ? 'Switch to light mode'
+                : 'Switch to dark mode',
             onPressed: () => context.read<ThemeProvider>().toggle(),
-            icon: Icon(isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+            icon: Icon(
+              isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+            ),
           ),
           IconButton(
             tooltip: 'Sign out',
@@ -175,13 +191,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 backgroundColor: colors.primaryContainer,
                                 child: ClipOval(
                                   child: imageUrl == null || imageUrl.isEmpty
-                                      ? Icon(Icons.person_rounded, size: 46, color: colors.primary)
+                                      ? Icon(
+                                          Icons.person_rounded,
+                                          size: 46,
+                                          color: colors.primary,
+                                        )
                                       : Image.network(
                                           imageUrl,
                                           width: 96,
                                           height: 96,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, _, _) => Icon(Icons.person_rounded, size: 46, color: colors.primary),
+                                          errorBuilder: (_, _, _) => Icon(
+                                            Icons.person_rounded,
+                                            size: 46,
+                                            color: colors.primary,
+                                          ),
                                         ),
                                 ),
                               ),
@@ -189,23 +213,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 right: 0,
                                 bottom: 0,
                                 child: IconButton.filled(
-                                  onPressed: _isUploading ? null : _pickProfileImage,
+                                  onPressed: _isUploading
+                                      ? null
+                                      : _pickProfileImage,
                                   tooltip: 'Change profile picture',
                                   icon: _isUploading
-                                      ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                      : const Icon(Icons.camera_alt_outlined, size: 18),
+                                      ? const SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.camera_alt_outlined,
+                                          size: 18,
+                                        ),
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 12),
-                          Text(user['name'] as String? ?? 'Student', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                          Text(
+                            user['name'] as String? ?? 'Student',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          Text(user['phone'] as String? ?? '', style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+                          Text(
+                            user['phone'] as String? ?? '',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
                           TextButton.icon(
                             onPressed: _isUploading ? null : _pickProfileImage,
                             icon: const Icon(Icons.image_outlined, size: 18),
-                            label: Text(_isUploading ? 'Uploading…' : 'Update profile picture'),
+                            label: Text(
+                              _isUploading
+                                  ? 'Uploading…'
+                                  : 'Update profile picture',
+                            ),
                           ),
                         ],
                       ),
@@ -218,17 +266,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text('Personal information', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          Text(
+                            'Personal information',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                           const SizedBox(height: 18),
-                          TextField(controller: _nameController, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Full name', prefixIcon: Icon(Icons.person_outline))),
+                          TextField(
+                            controller: _nameController,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                              labelText: 'Full name',
+                              prefixIcon: Icon(Icons.person_outline),
+                            ),
+                          ),
                           const SizedBox(height: 14),
-                          TextField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number', prefixIcon: Icon(Icons.phone_outlined))),
+                          TextField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            decoration: const InputDecoration(
+                              labelText: 'Phone number',
+                              prefixIcon: Icon(Icons.phone_outlined),
+                            ),
+                          ),
                           const SizedBox(height: 20),
                           FilledButton.icon(
                             onPressed: _isSaving ? null : _saveProfile,
-                            icon: _isSaving ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check_rounded),
+                            icon: _isSaving
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.check_rounded),
                             label: Text(_isSaving ? 'Saving…' : 'Save changes'),
-                            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(50),
+                            ),
                           ),
                         ],
                       ),
