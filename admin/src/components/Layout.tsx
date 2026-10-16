@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, ChevronDown, ClipboardList, GraduationCap, LayoutDashboard, LogOut, Menu, Moon, ShieldCheck, Sun, Users, Video, X } from 'lucide-react';
+import { BellRing, BookOpen, ChevronDown, ClipboardList, GraduationCap, KeyRound, LayoutDashboard, LogOut, Menu, Moon, ShieldCheck, Sun, Users, Video, X } from 'lucide-react';
 
 const navigation = [
   { to: '/dashboard/videos', label: 'Video library', icon: Video },
   { to: '/dashboard/users', label: 'Users & access', icon: Users },
+  { to: '/dashboard/notifications', label: 'Notifications', icon: BellRing },
+  { to: '/dashboard/security', label: 'Security', icon: KeyRound },
 ];
 
 export default function Layout() {
@@ -60,7 +62,7 @@ export default function Layout() {
 
         <div className="px-4 pb-2 pt-7 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Workspace</div>
         <nav aria-label="Main navigation" className="flex-1 space-y-1 px-3">
-          {navigation.map(({ to, label, icon: Icon }) => (
+          {navigation.filter(({ to }) => to !== '/dashboard/notifications' || currentUserRole === 'SUPER_ADMIN').map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}

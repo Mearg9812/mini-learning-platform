@@ -1,13 +1,32 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/auth_provider.dart';
+import 'screens/notifications_screen.dart';
 import 'providers/theme_provider.dart';
 import 'providers/video_provider.dart';
+import 'services/notification_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 
-void main() {
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    await NotificationService.instance.initialize(
+      onNotificationTap: () {
+        appNavigatorKey.currentState?.push(
+          MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
+        );
+      },
+    );
+  } catch (error) {
+    debugPrint('Push notifications could not be initialized: $error');
+  }
+
   runApp(
     MultiProvider(
       providers: [
@@ -27,6 +46,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, _) => MaterialApp(
+        navigatorKey: appNavigatorKey,
         title: 'Mini Learning',
         debugShowCheckedModeBanner: false,
         themeMode: themeProvider.themeMode,

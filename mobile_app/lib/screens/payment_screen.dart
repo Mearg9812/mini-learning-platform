@@ -75,13 +75,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Future<void> _submit() async {
     final amount = double.tryParse(_amount.text.trim());
     final currency = _currency.text.trim().toUpperCase();
-    if (amount == null ||
-        amount <= 0 ||
-        !RegExp(r'^[A-Z]{3}$').hasMatch(currency) ||
-        _receiptText.text.trim().isEmpty ||
-        _image == null) {
+    if (amount == null || amount <= 0 || !RegExp(r'^[A-Z]{3}$').hasMatch(currency)) {
       setState(
-        () => _error = 'Enter the amount and 3-letter currency, paste the bank message, and attach its screenshot.',
+        () => _error = 'Enter the amount paid and a 3-letter currency code.',
       );
       return;
     }
@@ -90,36 +86,25 @@ class _PaymentScreenState extends State<PaymentScreen> {
       _error = null;
     });
     try {
-      final image = _image!;
-      final extension = image.name.toLowerCase().split('.').last;
-      final mime =
-          image.mimeType ??
-          (extension == 'png'
-              ? 'image/png'
-              : extension == 'webp'
-              ? 'image/webp'
-              : 'image/jpeg');
-      final ticket = await context.read<AuthProvider>().client.post(
-        '/payment-requests/receipt-upload-url',
-        data: {
-          'fileName': image.name,
-          'fileType': mime,
-          'fileSize': await image.length(),
-        },
-      );
-      await Dio().put<dynamic>(
-        ticket.data['uploadUrl'] as String,
-        data: await image.readAsBytes(),
-        options: Options(headers: {'Content-Type': mime}),
-      );
+      String? receiptObjectKey;
+      if (_image != null) {
+        final image = _image!;
+        final extension = image.name.toLowerCase().split('.').last;
+        final mime = image.mimeType ?? (extension == 'png' ? 'image/png' : extension == 'webp' ? 'image/webp' : 'image/jpeg');
+        final ticket = await context.read<AuthProvider>().client.post('/payment-requests/receipt-upload-url', data: {
+          'fileName': image.name, 'fileType': mime, 'fileSize': await image.length(),
+        });
+        await Dio().put<dynamic>(ticket.data['uploadUrl'] as String, data: await image.readAsBytes(), options: Options(headers: {'Content-Type': mime}));
+        receiptObjectKey = ticket.data['receiptObjectKey'] as String;
+      }
       await context.read<AuthProvider>().client.post(
         '/payment-requests',
         data: {
           'option': _option,
           'amount': amount,
           'currency': currency,
-          'receiptText': _receiptText.text.trim(),
-          'receiptObjectKey': ticket.data['receiptObjectKey'],
+          if (_receiptText.text.trim().isNotEmpty) 'receiptText': _receiptText.text.trim(),
+          if (receiptObjectKey != null) 'receiptObjectKey': receiptObjectKey,
         },
       );
       _amount.clear();
@@ -166,7 +151,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'An administrator will check the amount, message, and screenshot, then grant the course access you paid for.',
+                    'Enter the payment amount. The SMS and screenshot are optional, but can help the administrator review your request.',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                   const SizedBox(height: 18),
@@ -222,7 +207,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     minLines: 3,
                     maxLines: 6,
                     decoration: const InputDecoration(
-                      labelText: 'Bank receipt text message',
+                      labelText: 'Bank receipt text message (optional)',
                       hintText: 'Paste the full SMS you received',
                     ),
                   ),
@@ -230,7 +215,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   OutlinedButton.icon(
                     onPressed: _sending ? null : _pickImage,
                     icon: const Icon(Icons.image_outlined),
-                    label: Text(_image?.name ?? 'Attach receipt screenshot'),
+                    label: Text(_image?.name ?? 'Attach receipt screenshot (optional)'),
                   ),
                   if (_error != null)
                     Padding(

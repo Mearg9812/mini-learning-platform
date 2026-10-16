@@ -28,7 +28,7 @@ type Role = 'USER' | 'ADMIN' | 'SUPER_ADMIN';
 interface UserData {
   id: string;
   name: string;
-  email: string;
+  email?: string | null;
   phone: string | null;
   role: Role;
   status: EnrollmentStatus;
@@ -136,7 +136,7 @@ function AccountSection({
               value={table.search}
               onChange={(event) => table.update({ search: event.target.value, page: 1 })}
               className="ui-input pl-9"
-              placeholder="Search name, email, phone"
+              placeholder={students ? "Search name or phone" : "Search name, email, or phone"}
             />
           </label>
           {students && (
@@ -201,12 +201,12 @@ function AccountSection({
                 <td className="px-5 py-4 sm:px-6">
                   <div className="flex items-center gap-3">
                     <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-100 font-bold text-indigo-700">
-                      {(user.name || user.email).charAt(0).toUpperCase()}
+                      {(user.name || user.phone || user.email || 'A').charAt(0).toUpperCase()}
                       {user.profileImage && <img src={user.profileImage} alt="" className="absolute inset-0 h-full w-full object-cover" />}
                     </div>
                     <div className="min-w-0">
                       <span className="block truncate font-semibold text-slate-800">{user.name || 'Unnamed account'}</span>
-                      <span className="block truncate text-xs text-slate-500">{user.email}{user.phone ? ` · ${user.phone}` : ''}</span>
+                      <span className="block truncate text-xs text-slate-500">{students ? (user.phone || 'No phone number') : (user.email || '')}{!students && user.phone ? ` · ${user.phone}` : ''}</span>
                     </div>
                   </div>
                 </td>
@@ -228,13 +228,13 @@ function AccountSection({
                 <td className="px-5 py-4 sm:px-6">
                   <div className="flex justify-end gap-1">
                     {students && user.status !== 'APPROVED' && (
-                      <button type="button" onClick={() => onEnrollmentChange(user, 'APPROVED')} title="Approve student" aria-label={`Approve ${user.email}`} className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50"><Check size={17} /></button>
+                      <button type="button" onClick={() => onEnrollmentChange(user, 'APPROVED')} title="Approve student" aria-label={`Approve ${user.phone || user.name}`} className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50"><Check size={17} /></button>
                     )}
-                    {students && user.status !== 'REJECTED' && user.status !== 'APPROVED' && (
-                      <button type="button" onClick={() => onEnrollmentChange(user, 'REJECTED')} title="Reject enrollment" aria-label={`Reject ${user.email}`} className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"><XCircle size={17} /></button>
+                    {students && user.status !== 'REJECTED' && (
+                      <button type="button" onClick={() => onEnrollmentChange(user, 'REJECTED')} title={user.status === 'APPROVED' ? 'Revoke approval' : 'Reject enrollment'} aria-label={`${user.status === 'APPROVED' ? 'Revoke approval for' : 'Reject'} ${user.phone || user.name}`} className="rounded-lg p-2 text-rose-600 hover:bg-rose-50"><XCircle size={17} /></button>
                     )}
-                    {(students || isSuperAdmin) && <button type="button" onClick={() => onEdit(user)} title="Edit account" aria-label={`Edit ${user.email}`} className="rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={16} /></button>}
-                    {(students || isSuperAdmin) && <button type="button" onClick={() => onDelete(user)} title="Delete account" aria-label={`Delete ${user.email}`} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={16} /></button>}
+                    {(students || isSuperAdmin) && <button type="button" onClick={() => onEdit(user)} title="Edit account" aria-label={`Edit ${user.phone || user.email || user.name}`} className="rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={16} /></button>}
+                    {(students || isSuperAdmin) && <button type="button" onClick={() => onDelete(user)} title="Delete account" aria-label={`Delete ${user.phone || user.email || user.name}`} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={16} /></button>}
                   </div>
                 </td>
               </tr>
@@ -258,7 +258,7 @@ function AccountSection({
 
 interface AccountForm {
   name: string;
-  email: string;
+  email: string | null;
   phone: string;
   password: string;
   role: 'ADMIN' | 'SUPER_ADMIN';
@@ -289,7 +289,7 @@ export default function Users({ section = 'both' }: { section?: 'both' | 'studen
 
   const beginEdit = (user: UserData) => {
     setEditingUser(user);
-    setForm({ name: user.name, email: user.email, phone: user.phone || '', password: '', role: user.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMIN' });
+    setForm({ name: user.name, email: user.email || '', phone: user.phone || '', password: '', role: user.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMIN' });
     setFormType(user.role === 'USER' ? 'STUDENT' : 'ADMIN');
     setFormError('');
   };
@@ -301,7 +301,7 @@ export default function Users({ section = 'both' }: { section?: 'both' | 'studen
     setFormError('');
     try {
       if (editingUser) {
-        await api.patch(`/users/${editingUser.id}`, { name: form.name, email: form.email, phone: form.phone || null });
+        await api.patch(`/users/${editingUser.id}`, { name: form.name, ...(formType === 'ADMIN' ? { email: form.email } : {}), phone: form.phone || null, ...(formType === 'STUDENT' && form.password ? { password: form.password } : {}) });
         if (formType === 'ADMIN' && isSuperAdmin && form.role !== editingUser.role) {
           await api.patch(`/users/${editingUser.id}/role`, { role: form.role });
         }
@@ -309,12 +309,12 @@ export default function Users({ section = 'both' }: { section?: 'both' | 'studen
       } else {
         await api.post('/users', {
           name: form.name,
-          email: form.email,
+          ...(formType === 'ADMIN' ? { email: form.email } : {}),
           phone: form.phone || null,
           password: form.password,
           role: formType === 'STUDENT' ? 'USER' : form.role,
         });
-        notify(formType === 'STUDENT' ? 'Student account created and marked pending approval.' : 'Administrator account created.');
+        notify(formType === 'STUDENT' ? 'Student account created. Free videos are available now; paid access needs approval.' : 'Administrator account created.');
       }
       setFormType(null);
       setEditingUser(null);
@@ -328,7 +328,7 @@ export default function Users({ section = 'both' }: { section?: 'both' | 'studen
 
   const handleDelete = async (user: UserData) => {
     const type = user.role === 'USER' ? 'student' : 'administrator';
-    if (!window.confirm(`Delete ${type} account for ${user.email}? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete ${type} account for ${user.phone || user.email || user.name}? This cannot be undone.`)) return;
     try {
       await api.delete(`/users/${user.id}`);
       notify(`${type[0].toUpperCase()}${type.slice(1)} account deleted.`);
@@ -341,7 +341,7 @@ export default function Users({ section = 'both' }: { section?: 'both' | 'studen
   const handleEnrollmentChange = async (user: UserData, status: EnrollmentStatus) => {
     try {
       await api.patch(`/users/${user.id}/enrollment-status`, { status });
-      notify(`${user.name || user.email} ${status === 'APPROVED' ? 'approved' : 'rejected'}.`);
+      notify(`${user.name || user.phone} ${status === 'APPROVED' ? 'approved' : 'approval revoked'}.`);
       await refresh();
     } catch (error: any) {
       notify(error.response?.data?.error || 'Could not update enrollment status.', true);
@@ -390,15 +390,15 @@ export default function Users({ section = 'both' }: { section?: 'both' | 'studen
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setFormType(null); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="account-form-title" className="ui-card my-auto w-full max-w-lg overflow-hidden shadow-2xl">
             <header className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
-              <div><p className="mb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-indigo-600">{formType === 'STUDENT' ? 'Student management' : 'Administrator management'}</p><h3 id="account-form-title" className="text-xl font-bold text-slate-900">{editingUser ? 'Edit account' : `Add ${formType === 'STUDENT' ? 'student' : 'administrator'}`}</h3><p className="mt-1 text-sm text-slate-500">{editingUser ? 'Update account contact information.' : 'Enter the account details below.'}</p></div>
+              <div><p className="mb-1 text-[10px] font-bold uppercase tracking-[0.15em] text-indigo-600">{formType === 'STUDENT' ? 'Student management' : 'Administrator management'}</p><h3 id="account-form-title" className="text-xl font-bold text-slate-900">{editingUser ? 'Edit account' : `Add ${formType === 'STUDENT' ? 'student' : 'administrator'}`}</h3><p className="mt-1 text-sm text-slate-500">{editingUser ? 'Update the account phone number or set a new student password.' : 'Enter the account details below.'}</p></div>
               <button type="button" onClick={() => setFormType(null)} disabled={saving} aria-label="Close" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
             </header>
             <form onSubmit={handleSave} className="space-y-4 px-6 py-6">
               {formError && <div role="alert" className="ui-alert ui-alert-error"><AlertCircle size={17} /><span>{formError}</span></div>}
               <div><label className="ui-label" htmlFor="account-name">Full name</label><input id="account-name" required minLength={2} maxLength={100} className="ui-input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></div>
-              <div><label className="ui-label" htmlFor="account-email">Email address</label><input id="account-email" required type="email" className="ui-input" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
-              <div><label className="ui-label" htmlFor="account-phone">Phone number</label><input id="account-phone" type="tel" maxLength={32} className="ui-input" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
-              {!editingUser && <div><label className="ui-label" htmlFor="account-password">Temporary password</label><input id="account-password" required minLength={8} type="password" className="ui-input" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /><p className="mt-1 text-xs text-slate-500">At least 8 characters. Student accounts need approval before video access.</p></div>}
+              {formType === 'ADMIN' && <div><label className="ui-label" htmlFor="account-email">Email address</label><input id="account-email" required type="email" className="ui-input" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>}
+              <div><label className="ui-label" htmlFor="account-phone">Phone number{formType === 'STUDENT' ? '' : ' (optional)'}</label><input id="account-phone" required={formType === 'STUDENT'} type="tel" maxLength={32} className="ui-input" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
+              {(!editingUser || formType === 'STUDENT') && <div><label className="ui-label" htmlFor="account-password">{editingUser ? 'Set new student password (optional)' : 'Temporary password'}</label><input id="account-password" required={!editingUser} minLength={8} type="password" className="ui-input" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /><p className="mt-1 text-xs text-slate-500">At least 8 characters. Students can sign in by phone number. Set a new password here if they forgot it.</p></div>}
               {formType === 'ADMIN' && isSuperAdmin && <div><label className="ui-label" htmlFor="account-role">Administrator role</label><select id="account-role" className="ui-input" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as AccountForm['role'] })}><option value="ADMIN">Admin</option><option value="SUPER_ADMIN">Super admin</option></select></div>}
               <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4"><button type="button" disabled={saving} onClick={() => setFormType(null)} className="ui-button ui-button-secondary">Cancel</button><button type="submit" disabled={saving} className="ui-button ui-button-primary">{saving ? <><LoaderCircle size={16} className="animate-spin" /> Saving…</> : editingUser ? <><Pencil size={15} /> Save changes</> : <><Plus size={16} /> Create account</>}</button></footer>
             </form>

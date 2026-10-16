@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "322955109732",
+    "project_id": "mini-learning-platform-170da",
+    "storage_bucket": "mini-learning-platform-170da.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:322955109732:android:c1163e42ec8169cb94c671",
+        "android_client_info": {
+          "package_name": "com.example.mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD496QNCuQNUrLe1gIMV_X6gpbAj_k1_QM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

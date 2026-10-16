@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -5,6 +8,7 @@ import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import 'video_details_screen.dart';
 import 'profile_screen.dart';
+import 'notifications_screen.dart';
 import '../providers/video_provider.dart';
 import 'payment_screen.dart';
 
@@ -15,13 +19,27 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _hasPendingPayment = false;
+  int _unreadNotificationCount = 0;
+  StreamSubscription<RemoteMessage>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    try {
+      _notificationSubscription = FirebaseMessaging.onMessage.listen((_) {
+        Future<void>.delayed(
+          const Duration(seconds: 1),
+          _refreshUnreadNotifications,
+        );
+      });
+    } catch (_) {
+      // The notification inbox still works if Firebase is temporarily unavailable.
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshUnreadNotifications();
       final access = context.read<AuthProvider>().user?['accessCourses'];
       if (access is List && access.isNotEmpty) {
         context.read<VideoProvider>().fetchVideos();
@@ -29,6 +47,38 @@ class _HomeScreenState extends State<HomeScreen> {
         _refreshPaymentReview();
       }
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshUnreadNotifications();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshUnreadNotifications() async {
+    try {
+      final response = await context.read<AuthProvider>().client.get('/notifications');
+      final notifications = List<dynamic>.from(response.data as List);
+      if (!mounted) return;
+      setState(() => _unreadNotificationCount = notifications
+          .where((notification) => notification['isRead'] != true)
+          .length);
+    } catch (_) {
+      // Notifications can be opened and refreshed independently of the library.
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
+    );
+    if (mounted) _refreshUnreadNotifications();
   }
 
   Future<void> _checkEnrollmentStatus() async {
@@ -126,6 +176,17 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Learning library', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
+          IconButton(
+            tooltip: _unreadNotificationCount > 0
+                ? 'Notifications ($_unreadNotificationCount unread)'
+                : 'Notifications',
+            onPressed: _openNotifications,
+            icon: Badge(
+              isLabelVisible: _unreadNotificationCount > 0,
+              label: Text(_unreadNotificationCount > 99 ? '99+' : '$_unreadNotificationCount'),
+              child: const Icon(Icons.notifications_none_rounded),
+            ),
+          ),
           IconButton(
             tooltip: 'Course payments',
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PaymentScreen())),

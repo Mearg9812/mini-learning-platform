@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/api_service.dart';
+import '../services/notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final ApiService _api = ApiService();
@@ -24,6 +27,7 @@ class AuthProvider extends ChangeNotifier {
         final user = Map<String, dynamic>.from(response.data as Map);
         if (user['role'] == 'USER') {
           _user = user;
+          unawaited(NotificationService.instance.enableForSignedInStudent());
         } else {
           await _storage.delete(key: 'token');
         }
@@ -39,35 +43,33 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> register({
     required String name,
-    required String email,
+    required String phone,
     required String password,
-    required String option,
-    required double amount,
-    required String currency,
-    required String receiptText,
-    required String receiptObjectKey,
-    String? phone,
+    String? option,
+    double? amount,
+    String? currency,
+    String? receiptText,
+    String? receiptObjectKey,
   }) async {
     await _api.client.post(
       '/register',
       data: {
         'name': name.trim(),
-        'email': email.trim().toLowerCase(),
-        'phone': phone?.trim(),
+        'phone': phone.trim(),
         'password': password,
-        'option': option,
-        'amount': amount,
-        'currency': currency,
-        'receiptText': receiptText.trim(),
-        'receiptObjectKey': receiptObjectKey,
+        if (option != null) 'option': option,
+        if (amount != null) 'amount': amount,
+        if (currency != null) 'currency': currency,
+        if (receiptText != null) 'receiptText': receiptText.trim(),
+        if (receiptObjectKey != null) 'receiptObjectKey': receiptObjectKey,
       },
     );
   }
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(String phone, String password) async {
     final response = await _api.client.post(
       '/login',
-      data: {'email': email.trim().toLowerCase(), 'password': password},
+      data: {'phone': phone.trim(), 'password': password},
     );
     final user = Map<String, dynamic>.from(response.data['user'] as Map);
     if (user['role'] != 'USER') {
@@ -76,17 +78,17 @@ class AuthProvider extends ChangeNotifier {
     await _storage.write(key: 'token', value: response.data['token'] as String);
     _user = user;
     _isReady = true;
+    unawaited(NotificationService.instance.enableForSignedInStudent());
     notifyListeners();
   }
 
   Future<void> updateProfile({
     required String name,
-    required String email,
-    String? phone,
+    required String phone,
   }) async {
     final response = await _api.client.patch(
       '/profile',
-      data: {'name': name.trim(), 'email': email.trim(), 'phone': phone?.trim()},
+      data: {'name': name.trim(), 'phone': phone.trim()},
     );
     _user = Map<String, dynamic>.from(response.data as Map);
     notifyListeners();
@@ -108,6 +110,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await NotificationService.instance.disableForSignedOutUser();
     await _storage.delete(key: 'token');
     _user = null;
     notifyListeners();

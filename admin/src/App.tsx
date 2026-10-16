@@ -5,6 +5,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Users from './pages/Users';
 import Enrollments from './pages/Enrollments';
+import Notifications from './pages/Notifications';
+import Security from './pages/Security';
 
 
 function App() {
@@ -31,6 +33,8 @@ function App() {
           <Route path="enrollment/students" element={<Users section="students" />} />
           <Route path="enrollments" element={<Navigate to="/dashboard/enrollment/enroll-students" replace />} />
           <Route path="users" element={<Users section="admins" />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="security" element={<Security />} />
         </Route>
         
         {/* Fallback route */}

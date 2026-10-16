@@ -15,7 +15,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _picker = ImagePicker();
   bool _isSaving = false;
@@ -26,7 +25,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     final user = context.read<AuthProvider>().user ?? const <String, dynamic>{};
     _nameController.text = user['name'] as String? ?? '';
-    _emailController.text = user['email'] as String? ?? '';
     _phoneController.text = user['phone'] as String? ?? '';
   }
 
@@ -35,7 +33,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await context.read<AuthProvider>().updateProfile(
         name: _nameController.text,
-        email: _emailController.text,
         phone: _phoneController.text,
       );
       if (mounted) _showMessage('Your profile is up to date.');
@@ -129,7 +126,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
     _phoneController.dispose();
     super.dispose();
   }
@@ -205,7 +201,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 12),
                           Text(user['name'] as String? ?? 'Student', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                           const SizedBox(height: 4),
-                          Text(user['email'] as String? ?? '', style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+                          Text(user['phone'] as String? ?? '', style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
                           TextButton.icon(
                             onPressed: _isUploading ? null : _pickProfileImage,
                             icon: const Icon(Icons.image_outlined, size: 18),
@@ -225,8 +221,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Text('Personal information', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 18),
                           TextField(controller: _nameController, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Full name', prefixIcon: Icon(Icons.person_outline))),
-                          const SizedBox(height: 14),
-                          TextField(controller: _emailController, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.mail_outline))),
                           const SizedBox(height: 14),
                           TextField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number', prefixIcon: Icon(Icons.phone_outlined))),
                           const SizedBox(height: 20),

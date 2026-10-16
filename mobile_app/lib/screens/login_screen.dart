@@ -12,9 +12,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _showPassword = false;
   String? _errorMessage;
   String? _successMessage;
 
@@ -26,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await context.read<AuthProvider>().login(
-        _emailController.text,
+        _phoneController.text,
         _passwordController.text,
       );
     } catch (error) {
@@ -56,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -107,18 +108,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                       ],
                       TextField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        autofillHints: const [AutofillHints.username, AutofillHints.email],
-                        decoration: const InputDecoration(labelText: 'Email address', prefixIcon: Icon(Icons.mail_outline)),
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        autofillHints: const [AutofillHints.username, AutofillHints.telephoneNumber],
+                        decoration: const InputDecoration(labelText: 'Phone number', prefixIcon: Icon(Icons.phone_outlined)),
                       ),
                       const SizedBox(height: 14),
                       TextField(
                         controller: _passwordController,
-                        obscureText: true,
+                        obscureText: !_showPassword,
                         autofillHints: const [AutofillHints.password],
                         onSubmitted: (_) => _login(),
-                        decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            tooltip: _showPassword ? 'Hide password' : 'Show password',
+                            onPressed: () => setState(() => _showPassword = !_showPassword),
+                            icon: Icon(_showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 22),
                       FilledButton(
@@ -138,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Student accounts are reviewed by the learning team before access is granted.',
+                        'Free videos are available after signup. Paid courses unlock after approval.',
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
                       ),
