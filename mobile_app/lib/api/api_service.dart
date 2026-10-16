@@ -12,11 +12,11 @@ class ApiService {
     const configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
     var baseUrl = configuredBaseUrl.trim();
     if (baseUrl.isEmpty) {
-      baseUrl = 'http://localhost:3000';
+      baseUrl = 'https://mini-learning-platform-60iw.onrender.com';
       if (!kIsWeb && Platform.isAndroid) {
         // Physical Android devices reach the computer through `adb reverse`.
         // Android emulators should override this with http://10.0.2.2:3000.
-        baseUrl = 'http://192.168.1.35:3000';
+        baseUrl = 'https://mini-learning-platform-60iw.onrender.com';
       }
     }
 
