@@ -77,6 +77,7 @@ const configuredOrigins = (process.env.CORS_ORIGINS || "")
 const allowedOrigins = new Set([
   "http://localhost:5173",
   "https://mini-learning-platform-n573xcepm-timeless1.vercel.app",
+  "https://mini-learning-platform-one.vercel.app/",
   ...configuredOrigins,
 ]);
 
