@@ -68,16 +68,22 @@ admin.initializeApp({
   credential: cert(serviceAccount),
 });
 
-// Allow requests ONLY from your local React app and your live Vercel app
-const allowedOrigins = [
+// Allow the local app and the deployed admin app. Additional origins can be
+// configured in Render as a comma-separated CORS_ORIGINS value.
+const configuredOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const allowedOrigins = new Set([
   "http://localhost:5173",
-  "https://YOUR_VERCEL_PROJECT_URL.vercel.app",
-];
+  "https://mini-learning-platform-one.vercel.app",
+  ...configuredOrigins,
+]);
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.has(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
