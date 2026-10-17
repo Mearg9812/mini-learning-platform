@@ -26,7 +26,6 @@ import path from "path";
 
 dotenv.config();
 
-// 2. SETTING UP THE APP
 const app = express();
 app.use(helmet());
 const limiter = rateLimit({
@@ -37,7 +36,6 @@ const limiter = rateLimit({
 app.use(limiter);
 const prisma = new PrismaClient();
 
-// Turns on the Cloudflare/AWS Chef
 const s3 = new S3Client({
   region: "auto", // Cloudflare handles the region automatically
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -48,7 +46,6 @@ const s3 = new S3Client({
   },
 });
 
-// Turns on Firebase Cloud Messaging
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
   ? path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
   : [
@@ -68,7 +65,7 @@ admin.initializeApp({
   credential: cert(serviceAccount),
 });
 
-// Allow the local app and the deployed admin app. Additional origins can be
+// Allow the local app and the deployed admin app.
 // configured in Render as a comma-separated CORS_ORIGINS value.
 const configuredOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
@@ -120,8 +117,6 @@ const getPublicR2ObjectUrl = (objectUrl: string): string => {
     return objectUrl;
   }
 
-  // Old records may point at an earlier R2 account ID, so match the S3
-  // endpoint shape and bucket instead of requiring today's account ID.
   if (!parsedUrl.hostname.endsWith(".r2.cloudflarestorage.com")) {
     return objectUrl;
   }
@@ -201,7 +196,7 @@ app.post(
   },
 );
 
-// 3. REGISTER ROUTE
+// REGISTER ROUTE
 app.post("/register", async (req: Request, res: Response): Promise<any> => {
   try {
     const {
@@ -334,7 +329,7 @@ app.post("/register", async (req: Request, res: Response): Promise<any> => {
   }
 });
 
-// 4. LOGIN ROUTE
+// LOGIN ROUTE
 app.post("/login", async (req: Request, res: Response): Promise<any> => {
   try {
     const { email, phone, password } = req.body;
@@ -406,20 +401,15 @@ const authenticate = async (
   res: Response,
   next: NextFunction,
 ): Promise<any> => {
-  // 1. Look at the request headers for the wristband
   const authHeader = req.headers.authorization;
 
-  // 2. If they didn't bring one, kick them out
   if (!authHeader) {
     return res.status(401).json({ error: "Access denied. No token provided." });
   }
 
-  // Tokens usually look like this: "Bearer eyJhbG..."
-  // We split the string by the space and take the second part (the actual token)
   const token = authHeader.split(" ")[1];
 
   try {
-    // 3. Verify the token using our secret password
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET as string,
@@ -462,8 +452,7 @@ const requireAdmin = (req: Request, res: Response, next: NextFunction): any => {
   return next();
 };
 
-// 5.5 OUR SUPER ADMIN BOUNCER
-// Only users with the SUPER_ADMIN role are allowed through!
+//SUPER ADMIN
 const requireSuperAdmin = (
   req: Request,
   res: Response,
@@ -694,14 +683,13 @@ app.patch(
   },
 );
 
-// 6. CREATE A VIDEO (PROTECTED ROUTE)
+// CREATE A VIDEO (PROTECTED ROUTE)
 app.post(
   "/videos",
   authenticate,
   requireAdmin,
   async (req: Request, res: Response): Promise<any> => {
     try {
-      // Notice we added activeSource here!
       const {
         title,
         description,
@@ -724,19 +712,18 @@ app.post(
           title,
           description,
           category,
-          duration: Number(duration), // We force this to be a strict Number to keep Prisma happy
+          duration: Number(duration),
           thumbnail,
           youtubeUrl,
           cloudflareUrl,
-          activeSource: activeSource || "YOUTUBE", // We save the admin's radio button choice!
+          activeSource: activeSource || "YOUTUBE",
           course,
         },
       });
 
       return res.status(201).json(newVideo);
     } catch (error) {
-      // I made the error log stand out so we can easily read it in the terminal!
-      console.log("\n❌ DATABASE ERROR:", error, "\n");
+      console.log("\n DATABASE ERROR:", error, "\n");
       return res.status(500).json({ error: "Failed to create video" });
     }
   },
@@ -758,7 +745,7 @@ app.get(
           user.role === "USER"
             ? { course: { in: accessCourses as any } }
             : undefined,
-        orderBy: { createdAt: "desc" }, // Shows newest videos first!
+        orderBy: { createdAt: "desc" },
       });
       return res.json(
         videos.map((video) => ({
@@ -1006,8 +993,7 @@ app.patch(
   },
 );
 
-// 8. GET YOUTUBE METADATA
-// React will send a YouTube Video ID here, and we ask Google for the details!
+// GET YOUTUBE METADATA
 app.post(
   "/youtube-info",
   authenticate,
@@ -1016,18 +1002,15 @@ app.post(
     try {
       const { videoId } = req.body;
 
-      // We use the native Javascript 'fetch' to talk to Google's API
       const response = await fetch(
         `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoId}&key=${process.env.YOUTUBE_API_KEY}`,
       );
       const data = await response.json();
 
-      // If YouTube can't find the video
       if (!data.items || data.items.length === 0) {
         return res.status(404).json({ error: "YouTube video not found" });
       }
 
-      // Extract the details we want
       const snippet = data.items[0].snippet;
       const contentDetails = data.items[0].contentDetails;
       const durationMatch = contentDetails.duration.match(
@@ -1039,7 +1022,6 @@ app.post(
           Number(durationMatch[3] || 0)
         : 0;
 
-      // Send it back to React nicely formatted
       return res.json({
         title: snippet.title,
         description: snippet.description,
@@ -1052,7 +1034,7 @@ app.post(
   },
 );
 
-// 9. GENERATE CLOUDFLARE UPLOAD TICKET (PRESIGNED URL)
+// GENERATE CLOUDFLARE UPLOAD TICKET (PRESIGNED URL)
 app.post(
   "/upload-url",
   authenticate,
@@ -1072,7 +1054,6 @@ app.post(
 
       const cloudflareUrl = getPublicR2ObjectUrl(cloudflareObjectKey);
 
-      // We send BOTH the secret upload ticket AND the final public URL back to React
       return res.json({
         uploadUrl: uploadUrl,
         cloudflareUrl: cloudflareUrl,
@@ -1084,7 +1065,7 @@ app.post(
   },
 );
 
-// 10. DELETE A VIDEO
+// DELETE A VIDEO
 app.delete(
   "/videos/:id",
   authenticate,
@@ -1100,7 +1081,7 @@ app.delete(
   },
 );
 
-// 11. UPDATE ACTIVE SOURCE (Edit Video)
+// UPDATE ACTIVE SOURCE (Edit Video)
 app.patch(
   "/videos/:id/source",
   authenticate,
@@ -1109,7 +1090,6 @@ app.patch(
     try {
       const { activeSource } = req.body; // Must be 'YOUTUBE' or 'CLOUDFLARE'
       const updatedVideo = await prisma.video.update({
-        // NOTICE the "as string" we added here!
         where: { id: req.params.id as string },
         data: { activeSource },
       });
@@ -1219,14 +1199,13 @@ app.patch(
   },
 );
 
-// 12. GET USERS WITH SEARCH & PAGINATION
+// GET USERS WITH SEARCH & PAGINATION
 app.get(
   "/users",
   authenticate,
   requireAdmin,
   async (req: Request, res: Response): Promise<any> => {
     try {
-      // 1. Read page number, limit, and search query from the URL (e.g., /users?page=1&search=alex)
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const limit = Math.min(
         50,
@@ -1284,10 +1263,8 @@ app.get(
           : {}),
       };
 
-      // Calculate how many users to skip
       const skip = (page - 1) * limit;
 
-      // Run both queries together: fetch users AND count the total matching users
       const [users, totalCount] = await Promise.all([
         prisma.user.findMany({
           where,
@@ -1310,7 +1287,6 @@ app.get(
         }),
       ]);
 
-      // Send back the users PLUS the pagination details
       return res.json({
         users: users.map(({ email, ...user }) => ({
           ...user,
@@ -1424,14 +1400,14 @@ app.patch(
   },
 );
 
-// 13. UPDATE USER ROLE (SUPER ADMIN ONLY)
+// UPDATE USER ROLE (SUPER ADMIN ONLY)
 app.patch(
   "/users/:id/role",
   authenticate,
   requireSuperAdmin,
   async (req: Request, res: Response): Promise<any> => {
     try {
-      const { role } = req.body; // 'USER', 'ADMIN', or 'SUPER_ADMIN'
+      const { role } = req.body;
       if (!["USER", "ADMIN", "SUPER_ADMIN"].includes(role)) {
         return res.status(400).json({ error: "Choose a valid account role." });
       }
