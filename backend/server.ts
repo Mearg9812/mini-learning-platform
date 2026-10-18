@@ -67,21 +67,36 @@ admin.initializeApp({
 
 // Allow the local app and the deployed admin app.
 // configured in Render as a comma-separated CORS_ORIGINS value.
+const normalizeOrigin = (origin: string): string => {
+  const trimmed = origin.trim().replace(/\/+$/, "");
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return trimmed;
+  }
+};
+
 const configuredOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 const allowedOrigins = new Set([
   "http://localhost:5173",
   "https://mini-learning-platform-n573xcepm-timeless1.vercel.app",
-  "https://mini-learning-platform-one.vercel.app/",
+  "https://mini-learning-platform-one.vercel.app",
   ...configuredOrigins,
 ]);
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const normalizedOrigin = normalizeOrigin(origin);
+      if (allowedOrigins.has(normalizedOrigin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
