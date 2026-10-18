@@ -1,9 +1,7 @@
 import axios from "axios";
 
-// Create a custom delivery driver pointing to our Node backend
 const api = axios.create({
-  // baseURL: "http://localhost:3000",
-  baseURL: "https://mini-learning-platform-60iw.onrender.com",
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000",
 });
 
 // The "Interceptor" stops the driver right before he leaves React...
